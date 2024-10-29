@@ -39,6 +39,10 @@ import org.json.JSONObject
 
 class AddActivity : AppCompatActivity() {
 
+    companion object {
+        const val REQUEST_CODE_MAP = 1
+    }
+
 	private lateinit var binding: ActivityAddBinding
 
 	private lateinit var auth: FirebaseAuth
@@ -113,6 +117,18 @@ class AddActivity : AppCompatActivity() {
                         getLastKnownLocation()
                     }
                 }
+
+                // Botão para abrir o mapa
+    	    	binding.mapsButton.setOnClickListener {
+                    location?.let {
+                        val intent = Intent(this, MapsActivity::class.java)
+                        intent.putExtra("latitude", it.latitude)
+                        intent.putExtra("longitude", it.longitude)
+                        startActivityForResult(intent, REQUEST_CODE_MAP)
+                    }
+                }
+
+                binding.mapsButton.isEnabled = false
 
     	    	// Configurar cliques nos botões usando binding
     	    	binding.addButton.setOnClickListener {
@@ -206,9 +222,26 @@ class AddActivity : AppCompatActivity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_MAP && resultCode == RESULT_OK) {
+            data?.let {
+                val resultLatitude = it.getDoubleExtra("latitude", Double.NaN)
+                val resultLongitude = it.getDoubleExtra("longitude", Double.NaN)
+                location = Location(location!!).apply {
+                    latitude = resultLatitude
+                    longitude = resultLongitude
+                }
+                getAddressFromLocation(resultLatitude, resultLongitude)
+            }
+        }
+    }
+
     private fun getAddressFromLocation(latitude: Double, longitude: Double) {
         CoroutineScope(Dispatchers.IO).launch {
-            binding.locationTextView.text = "Localizando endereço..."
+            withContext(Dispatchers.Main) {
+                binding.locationTextView.text = "Localizando endereço..."
+            }
             withContext(Dispatchers.IO) {
                 try {
                     val client = OkHttpClient()
@@ -216,6 +249,7 @@ class AddActivity : AppCompatActivity() {
 
                     val request = Request.Builder()
                         .url(url)
+                        .addHeader("User-Agent", "FirebaseApp/1.0 (walber.beltrame@ifes.com)")
                         .build()
 
                     client.newCall(request).execute().use { response ->
@@ -248,10 +282,14 @@ class AddActivity : AppCompatActivity() {
                 lastKnownLocation?.let {
                     // Guarda na variável global
                     location = it
+                    // Ativa o botão do mapa
+                    binding.mapsButton.isEnabled = true
                     // Obter o endereço a partir da localização
                     getAddressFromLocation(it.latitude, it.longitude)
                 } ?: run {
                     binding.locationTextView.text = "Localização não encontrada"
+                    // Desativa o botão do mapa
+                    binding.mapsButton.isEnabled = false
                 }
             }
         }
